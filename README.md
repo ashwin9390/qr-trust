@@ -66,6 +66,8 @@ git remote add origin https://github.com/ashwin9390/qr-trust.git
 git push -u origin main
 ```
 
-## License
+## Author & License
 
-MIT
+- **Author:** Ashwin — [@ashwin9390](https://github.com/ashwin9390)
+- **License:** MIT — see the [LICENSE](LICENSE) file.
+- **GitHub:** [ashwin9390/qr-trust](https://github.com/ashwin9390/qr-trust)
