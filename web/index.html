@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QR Trust PoC</title>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+<style>
+:root{--bg:#f3f5f4;--card:#fff;--ink:#14201c;--mute:#5d6b66;--line:#d5dcd9;--ok:#14733f;--okbg:#dff3e7;--warn:#8a5a00;--warnbg:#fbefcf;--bad:#a62a22;--badbg:#f9dfdc;--acc:#14201c;--accink:#fff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1513;--card:#18201d;--ink:#e8efec;--mute:#93a39d;--line:#2c3935;--ok:#6fd49a;--okbg:#12301f;--warn:#e8bf62;--warnbg:#33290f;--bad:#f09a92;--badbg:#3a1a17;--acc:#e8efec;--accink:#0f1513}}
+:root[data-theme="dark"]{--bg:#0f1513;--card:#18201d;--ink:#e8efec;--mute:#93a39d;--line:#2c3935;--ok:#6fd49a;--okbg:#12301f;--warn:#e8bf62;--warnbg:#33290f;--bad:#f09a92;--badbg:#3a1a17;--acc:#e8efec;--accink:#0f1513}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Schibsted Grotesk",system-ui,sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:28px;line-height:1.1;margin:8px 0 6px;font-weight:800;letter-spacing:-.02em}
+h2{font-size:18px;margin:0 0 4px;font-weight:600}
+p.sub{color:var(--mute);margin:0 0 18px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:0 0 14px}
+.hint{color:var(--mute);font-size:14px;margin:0 0 12px}
+label{display:block;font-size:14px;font-weight:600;margin:10px 0 4px}
+input[type=text],textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px}
+textarea{min-height:84px;font:13px/1.4 ui-monospace,Menlo,monospace;word-break:break-all}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+button{font:inherit;font-weight:600;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 13px;cursor:pointer}
+button.p{background:var(--acc);color:var(--accink);border-color:var(--acc)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+.qr{background:#fff;border-radius:8px;padding:10px;width:fit-content;margin:14px auto 4px}
+.qr svg{display:block;width:min(260px,70vw);height:auto}
+.cap{text-align:center;font-size:14px;color:var(--mute);min-height:20px}
+.chk{display:flex;gap:8px;align-items:center;font-weight:400;margin:10px 0 0}
+.verdict{border-radius:8px;padding:14px;margin-top:14px}
+.verdict b{display:block;font-size:26px;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+.verdict span{font-size:14px}
+.v-ok{background:var(--okbg);color:var(--ok)}.v-warn{background:var(--warnbg);color:var(--warn)}.v-bad{background:var(--badbg);color:var(--bad)}
+ul.c{list-style:none;margin:12px 0 0;padding:0;font-size:14px}
+ul.c li{padding:6px 0;border-top:1px solid var(--line);display:flex;gap:8px}
+ul.c i{font-style:normal;font-weight:800;width:16px;flex:none}
+.pass i{color:var(--ok)}.fail i{color:var(--bad)}.note i{color:var(--warn)}
+video{width:100%;border-radius:8px;margin-top:10px;display:none;background:#000}
+.ctx{font-size:13px;color:var(--mute);margin-top:12px;word-break:break-word}
+details{border-top:1px solid var(--line);padding:10px 0}details:first-of-type{border-top:0}summary{cursor:pointer;font-weight:600}details p{margin:8px 0 0;font-size:14px;color:var(--mute)}details p b{color:var(--ink)}
+</style>
+</head>
+<body>
+<main>
+<h1>Does this QR deserve trust?</h1>
+<p class="sub">Issue a signed QR, try forging it, then verify it before anything opens. Everything runs in your browser, and keys exist only for this session.</p>
+
+<section>
+<h2>Issue a signed QR</h2>
+<p class="hint">The issuer signs the destination, expiry and a one-time nonce with its private key.</p>
+<label for="url">Destination URL</label>
+<input type="text" id="url" value="https://example.com/check" inputmode="url" autocapitalize="off">
+<label for="ttl">Valid for (seconds)</label>
+<input type="text" id="ttl" value="300" inputmode="numeric">
+<div class="row"><button class="p" id="bIssue">Issue signed QR</button></div>
+<div class="qr" id="qrbox" hidden></div>
+<div class="cap" id="qrcap"></div>
+</section>
+
+<section>
+<h2>Attack lab</h2>
+<p class="hint">Make QR codes an attacker could print. Each one should fail verification.</p>
+<div class="row">
+<button id="aUnsigned">Unsigned lookalike</button>
+<button id="aForged">Forged signature</button>
+<button id="aTamper">Tampered URL</button>
+<button id="aExpired">Expired</button>
+<button id="aJs">javascript: payload</button>
+<button id="aHijack">Hijacked destination</button>
+</div>
+</section>
+
+<section>
+<h2>Verify</h2>
+<p class="hint">Paste the QR text, upload a photo of a QR, or scan with the camera.</p>
+<textarea id="inp" placeholder="QRT1.… or any URL" spellcheck="false"></textarea>
+<label for="allow">Allowed domains for unsigned codes</label>
+<input type="text" id="allow" value="example.com">
+<label for="land">Where the link actually lands (optional)</label>
+<input type="text" id="land" placeholder="Simulates a click-time redirect check" inputmode="url" autocapitalize="off">
+<label class="chk"><input type="checkbox" id="once" checked> Single-use codes (replay protection)</label>
+<div class="row">
+<button class="p" id="bVerify">Verify</button>
+<button id="bLast">Use last issued</button>
+<button id="bFile">Upload image</button>
+<button id="bCam">Scan with camera</button>
+<button id="bReset">Reset replay cache</button>
+</div>
+<input type="file" id="file" accept="image/*" hidden>
+<video id="vid" playsinline muted></video>
+<div id="out" aria-live="polite"></div>
+<div class="ctx" id="ctx"></div>
+</section>
+<section>
+<h2>Threat model</h2>
+<p class="hint">How attackers use QR codes, and what this PoC does about each.</p>
+<details><summary>Fake login and payment pages (quishing)</summary><p>A QR leads to a cloned sign-in, MFA prompt or checkout. Often pasted into emails as an image so text filters never see the link.</p><p><b>PoC:</b> unsigned codes never get TRUSTED, and lookalike domains are flagged. <b>Gap:</b> a convincing lookalike with ASCII characters can still score low.</p></details>
+<details><summary>Sticker swaps in public places</summary><p>A fake code is stuck over a real one on a parking meter, menu, poster or ATM, so victims pay or sign in on the attacker’s site.</p><p><b>PoC:</b> the real signed code verifies, the sticker does not. <b>Gap:</b> only helps if people scan with a verifying scanner, not the stock camera.</p></details>
+<details><summary>Auto-action payloads</summary><p>QR content is not always a web link. It can trigger a call, SMS, Wi-Fi join, contact import, app install or payment request, so one scan sets up the next step.</p><p><b>PoC:</b> only https URLs can pass, other schemes are blocked. <b>Gap:</b> Wi-Fi and payment formats are not parsed yet.</p></details>
+<details><summary>Login-by-QR hijacking</summary><p>Services that sign you in by scanning a QR can be abused by showing the victim the attacker’s live login QR, so the victim approves the attacker’s session.</p><p><b>PoC:</b> single-use, short-expiry nonces limit this. <b>Gap:</b> needs binding to the user’s own session and device.</p></details>
+<details><summary>Hiding from scanners</summary><p>Split or nested codes, QR drawn from text characters, and redirect chains that show a clean page to security tools but a malicious one to real visitors.</p><p><b>PoC:</b> unsigned codes are never trusted regardless of what the page shows. <b>Gap:</b> no sandbox or click-time re-check yet.</p></details>
+<details><summary>Tracking the scanner</summary><p>The landing page can fingerprint the device (model, battery, location), profile the victim, or tell targets apart from analysts.</p><p><b>PoC:</b> the verifier never opens the destination. <b>Gap:</b> the page that finally opens still sees everything.</p></details>
+<details><summary>Weak points even with signing</summary><p>Fake keys added to the trust list, a hijacked destination behind a valid signature, replay of a photographed code, and warnings people click through.</p><p><b>Now in the PoC:</b> origin and path binding, checked against the final landing page. <b>Next:</b> server-side nonce store, key revocation, hard stop on UNVERIFIED for sensitive actions.</p></details>
+</section>
+</main>
+
+<script>
+const enc=new TextEncoder(),dec=new TextDecoder();
+const b64u=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const unb64u=s=>{s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return Uint8Array.from(atob(s),c=>c.charCodeAt(0))};
+const $=id=>document.getElementById(id);
+const KEY={name:'ECDSA',namedCurve:'P-256'},SIG={name:'ECDSA',hash:'SHA-256'};
+const trusted={},seen=new Set();let issuer,rogue,last='';
+
+async function genKey(){
+  const kp=await crypto.subtle.generateKey(KEY,true,['sign','verify']);
+  const jwk=await crypto.subtle.exportKey('jwk',kp.publicKey);
+  const kid=b64u(await crypto.subtle.digest('SHA-256',enc.encode(jwk.x+jwk.y))).slice(0,8);
+  return{kp,kid};
+}
+async function init(){
+  issuer=await genKey();rogue=await genKey();
+  trusted[issuer.kid]=issuer.kp.publicKey;
+}
+const ready=init();
+
+async function make(url,ttl,opt={}){
+  await ready;
+  const key=opt.key||issuer;
+  let o='',pa='';try{const u=new URL(url);o=u.origin;pa=u.pathname}catch(e){}
+  const p={v:1,kid:opt.kid||issuer.kid,url,origin:o,path:pa,exp:Math.floor(Date.now()/1000)+ttl,n:b64u(crypto.getRandomValues(new Uint8Array(8)))};
+  const pb=enc.encode(JSON.stringify(p));
+  const sig=await crypto.subtle.sign(SIG,key.kp.privateKey,pb);
+  return 'QRT1.'+b64u(pb)+'.'+b64u(sig);
+}
+function show(text,cap){
+  last=text;
+  const q=qrcode(0,'M');q.addData(text);q.make();
+  const box=$('qrbox');box.innerHTML=q.createSvgTag(4,0);box.hidden=false;
+  $('qrcap').textContent=cap;$('inp').value=text;$('land').value='';
+}
+
+$('bIssue').onclick=async()=>show(await make($('url').value.trim(),+$('ttl').value||300),'Signed by trusted issuer '+issuer.kid);
+$('aUnsigned').onclick=()=>show('https://examp1e.com/check','Plain URL, no signature');
+$('aForged').onclick=async()=>show(await make($('url').value.trim(),300,{key:rogue,kid:issuer.kid}),'Signed with an attacker key, claiming the real issuer ID');
+$('aTamper').onclick=async()=>{const t=await make($('url').value.trim(),300);const[a,b,c]=t.split('.');const p=JSON.parse(dec.decode(unb64u(b)));p.url='https://evil.example.net/login';show([a,b64u(enc.encode(JSON.stringify(p))),c].join('.'),'Real signature, URL swapped afterwards')};
+$('aExpired').onclick=async()=>show(await make($('url').value.trim(),-60),'Genuine signature, but already expired');
+$('aJs').onclick=async()=>show(await make('javascript:alert(document.cookie)',300),'Validly signed, but the scheme is dangerous');
+$('aHijack').onclick=async()=>{show(await make($('url').value.trim(),300),'Valid signed QR, but the link later redirects elsewhere');$('land').value='https://evil.example.net/check'};
+$('bLast').onclick=()=>{if(last)$('inp').value=last};
+$('bReset').onclick=()=>{seen.clear();$('out').innerHTML='<p class="hint" style="margin-top:12px">Replay cache cleared.</p>'};
+
+const inb=(u,p)=>u.origin===p.origin&&(u.pathname===p.path||u.pathname.startsWith(p.path.replace(/\/$/,'')+'/'));
+const SHORT=['bit.ly','tinyurl.com','t.co','goo.gl','is.gd','ow.ly','cutt.ly','rb.gy'];
+function policy(u,allow){
+  const r=[];let score=0,block=false,url;
+  try{url=new URL(u)}catch(e){return{r:[['fail','Not a valid URL']],score:100,block:true}}
+  const sch=url.protocol;
+  if(sch==='https:')r.push(['pass','Uses https']);
+  else if(sch==='http:'){r.push(['note','Plain http, traffic is not encrypted']);score+=30}
+  else{r.push(['fail','Dangerous scheme: '+sch]);score+=100;block=true}
+  if(!block){
+    const h=url.hostname;
+    if(/^\d+\.\d+\.\d+\.\d+$/.test(h)||h.includes(':')){r.push(['fail','Raw IP address as host']);score+=40}
+    if(h.includes('xn--')||/[^\x00-\x7f]/.test(u)){r.push(['fail','Punycode or non-ASCII host, possible lookalike']);score+=40}
+    if(SHORT.includes(h)){r.push(['note','URL shortener hides the real destination']);score+=30}
+    if(url.username||u.includes('@')){r.push(['fail','Credentials in URL, a common spoofing trick']);score+=40}
+    if(h.split('.').length>4){r.push(['note','Unusually deep subdomain chain']);score+=15}
+    const ok=allow.some(d=>h===d||h.endsWith('.'+d));
+    if(allow.length){ok?r.push(['pass','Domain is on the allowlist']):(r.push(['note','Domain is not on the allowlist']),score+=25)}
+  }
+  return{r,score:Math.min(score,100),block,host:url.hostname};
+}
+
+async function verify(raw){
+  raw=raw.trim();const checks=[];let level,title,why,dest='';
+  const allow=$('allow').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  await ready;
+  if(raw.startsWith('QRT1.')){
+    const parts=raw.split('.');let p;
+    try{p=JSON.parse(dec.decode(unb64u(parts[1])))}catch(e){return out('bad','BLOCKED','Signed-QR envelope is malformed.',[['fail','Cannot parse payload']],'')}
+    dest=p.url||'';
+    const pub=trusted[p.kid];
+    if(!pub){return out('bad','BLOCKED','Issuer is not in your trust list.',[['fail','Unknown issuer ID: '+p.kid]],dest)}
+    checks.push(['pass','Issuer '+p.kid+' is trusted']);
+    let valid=false;
+    try{valid=await crypto.subtle.verify(SIG,pub,unb64u(parts[2]),unb64u(parts[1]))}catch(e){}
+    if(!valid)return out('bad','BLOCKED','The signature does not match. This QR was forged or altered.',[...checks,['fail','Signature invalid']],dest);
+    checks.push(['pass','Signature is valid, content is unaltered']);
+    if(p.exp<Date.now()/1000)return out('bad','BLOCKED','The signature is genuine but the code has expired.',[...checks,['fail','Expired '+Math.round(Date.now()/1000-p.exp)+'s ago']],dest);
+    checks.push(['pass','Not expired']);
+    if(p.origin){
+      let u;try{u=new URL(p.url)}catch(e){u=null}
+      if(!u||!inb(u,p))return out('bad','BLOCKED','The URL falls outside the origin and path the issuer bound it to.',[...checks,['fail','Origin or path mismatch']],dest);
+      checks.push(['pass','URL matches signed origin '+p.origin]);
+      const land=$('land').value.trim();
+      if(land){let l;try{l=new URL(land)}catch(e){l=null}
+        if(!l||!inb(l,p))return out('bad','BLOCKED','The link lands somewhere the issuer never signed. Possible hijack or open redirect.',[...checks,['fail','Landing '+land+' is outside the signed origin']],dest);
+        checks.push(['pass','Landing page matches signed origin and path'])}
+    }
+    if($('once').checked){
+      if(seen.has(p.n))return out('bad','BLOCKED','This code was already used. Possible replay.',[...checks,['fail','Nonce seen before']],dest);
+      seen.add(p.n);checks.push(['pass','First use of this code']);
+    }
+    const q=policy(p.url,[]);
+    const rest=q.r.filter(x=>!x[1].includes('allowlist'));
+    if(q.block)return out('bad','BLOCKED','Signed by a trusted issuer, but the destination itself is dangerous.',[...checks,...rest],dest);
+    const hard=rest.some(x=>x[0]==='fail');
+    return out(hard?'warn':'ok',hard?'REVIEW':'TRUSTED',hard?'Signature is good, but the URL has red flags. Check with the issuer.':'Verified issuer, intact content, within validity.',[...checks,...rest],dest);
+  }
+  const q=policy(raw,allow);
+  const checks2=[['note','No signature, the origin cannot be proven'],...q.r];
+  if(q.block||q.score>=60)return out('bad','BLOCKED','Unsigned and risky. Risk score '+q.score+'/100.',checks2,raw);
+  if(q.score>=25+1)return out('warn','SUSPICIOUS','Unsigned with warning signs. Risk score '+q.score+'/100.',checks2,raw);
+  return out('warn','UNVERIFIED','Looks plain, but anyone could have printed it. Risk score '+q.score+'/100.',checks2,raw);
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function out(l,t,w,c,d){
+  $('out').innerHTML='<div class="verdict v-'+l+'"><b>'+t+'</b><span>'+esc(w)+'</span></div>'+
+  (d?'<div class="ctx">Destination: '+esc(d)+' (not opened)</div>':'')+
+  '<ul class="c">'+c.map(x=>'<li class="'+x[0]+'"><i>'+({pass:'✓',fail:'✗',note:'!'})[x[0]]+'</i><span>'+esc(x[1])+'</span></li>').join('')+'</ul>';
+}
+$('bVerify').onclick=()=>verify($('inp').value);
+
+function decodeImg(img){
+  const c=document.createElement('canvas');c.width=img.naturalWidth||img.width;c.height=img.naturalHeight||img.height;
+  const x=c.getContext('2d');x.drawImage(img,0,0);
+  return jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height);
+}
+$('bFile').onclick=()=>$('file').click();
+$('file').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const img=new Image();img.onload=()=>{const r=decodeImg(img);if(r){$('inp').value=r.data;verify(r.data)}else out('warn','NO QR FOUND','Try a sharper, closer photo.',[],'')};
+  img.src=URL.createObjectURL(f);
+};
+let stream=null;
+$('bCam').onclick=async()=>{
+  const v=$('vid');
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;v.style.display='none';$('bCam').textContent='Scan with camera';return}
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})}
+  catch(e){out('warn','CAMERA UNAVAILABLE','Allow camera access, or use Upload image instead.',[],'');return}
+  v.srcObject=stream;v.style.display='block';await v.play();$('bCam').textContent='Stop camera';
+  const c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true});
+  (function tick(){
+    if(!stream)return;
+    if(v.videoWidth){c.width=v.videoWidth;c.height=v.videoHeight;x.drawImage(v,0,0);
+      const r=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height);
+      if(r){$('inp').value=r.data;stream.getTracks().forEach(t=>t.stop());stream=null;v.style.display='none';$('bCam').textContent='Scan with camera';verify(r.data);return}}
+    requestAnimationFrame(tick);
+  })();
+};
+
+(async()=>{
+  const o=['Platform: '+(navigator.userAgentData?.platform||navigator.platform||'unknown')];
+  try{if(navigator.userAgentData){const h=await navigator.userAgentData.getHighEntropyValues(['model']);if(h.model)o.push('Model: '+h.model)}}catch(e){}
+  try{if(navigator.getBattery){const b=await navigator.getBattery();o.push('Battery: '+Math.round(b.level*100)+'%')}}catch(e){}
+  $('ctx').textContent='Scanning device: '+o.join(', ')+'. Context like this can feed a risk score; Safari hides most of it.';
+})();
+</script>
+</body>
+</html>

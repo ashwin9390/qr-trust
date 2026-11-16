@@ -1,0 +1,14 @@
+{
+  "name": "qr-trust",
+  "version": "0.1.0",
+  "description": "Signed-QR verification PoC: signatures, expiry, origin/path binding, server-side replay store, revocation",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/server.js",
+    "issue": "node cli/issue.js",
+    "test": "node --test"
+  },
+  "optionalDependencies": { "qrcode": "^1.5.4" }
+}
